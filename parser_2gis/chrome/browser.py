@@ -39,7 +39,25 @@ class ChromeBrowser():
             '--no-first-run', '--no-sandbox', '--disable-fre',
             '--remote-allow-origins=*',
             f'--js-flags=--expose-gc --max-old-space-size={chrome_options.memory_limit}',
+            # Stealth flags to avoid automation detection
+            '--disable-blink-features=AutomationControlled',
+            '--disable-infobars',
+            '--disable-dev-shm-usage',
+            '--no-service-autorun',
+            '--password-store=basic',
+            '--use-mock-keychain',
+            '--disable-background-networking',
+            '--disable-breakpad',
+            '--disable-component-update',
+            '--disable-domain-reliability',
+            '--disable-sync',
+            '--metrics-recording-only',
+            '--window-size=1920,1080',
         ]
+
+        if chrome_options.proxy:
+            logger.debug('Используется прокси: %s', chrome_options.proxy)
+            self._chrome_cmd.append(f'--proxy-server={chrome_options.proxy}')
 
         if chrome_options.start_maximized:
             self._chrome_cmd.append('--start-maximized')

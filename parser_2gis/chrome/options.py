@@ -25,6 +25,8 @@ class ChromeOptions(BaseModel):
         disable_images: Disable images.
         silent_browser: Do not show Chrome's output in `stdout`.
         memory_size: Max V8's memory size.
+        proxy: Proxy server URL (e.g. socks5://user:pass@host:port).
+        user_agent: Custom User-Agent string.
     """
     binary_path: Optional[pathlib.Path] = None
     start_maximized: bool = False
@@ -32,3 +34,5 @@ class ChromeOptions(BaseModel):
     disable_images: bool = True
     silent_browser: bool = True
     memory_limit: PositiveInt = default_memory_limit()
+    proxy: Optional[str] = None
+    user_agent: Optional[str] = None

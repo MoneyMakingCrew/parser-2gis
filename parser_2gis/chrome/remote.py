@@ -83,32 +83,101 @@ class ChromeRemote:
 
     def _setup_tab(self) -> None:
         """Hide webdriver, enable requests/response interception, fix UA."""
-        # Fix user agent for headless browser
-        original_useragent = self.execute_script('navigator.userAgent')
-        fixed_useragent = original_useragent.replace('Headless', '')
-        self._chrome_tab.Network.setUserAgentOverride(userAgent=fixed_useragent)
+        # Custom user agent or fix headless marker
+        if self._chrome_options.user_agent:
+            self._chrome_tab.Network.setUserAgentOverride(
+                userAgent=self._chrome_options.user_agent
+            )
+        else:
+            original_useragent = self.execute_script('navigator.userAgent')
+            fixed_useragent = original_useragent.replace('Headless', '')
+            self._chrome_tab.Network.setUserAgentOverride(userAgent=fixed_useragent)
 
-        # Hide webdriver traces
+        # Comprehensive anti-detection scripts
         self.add_start_script(r'''
+            // 1. Hide webdriver property
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
-            })
+            });
+
+            // 2. Fix chrome.runtime (present in real Chrome, missing in automated)
+            if (!window.chrome) { window.chrome = {}; }
+            if (!window.chrome.runtime) {
+                window.chrome.runtime = {
+                    connect: function() {},
+                    sendMessage: function() {},
+                    onMessage: { addListener: function() {} },
+                    PlatformOs: {
+                        MAC: 'mac', WIN: 'win', ANDROID: 'android',
+                        CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd'
+                    },
+                    PlatformArch: {
+                        ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64',
+                        MIPS: 'mips', MIPS64: 'mips64'
+                    },
+                    PlatformNaclArch: {
+                        ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64',
+                        MIPS: 'mips', MIPS64: 'mips64'
+                    },
+                    RequestUpdateCheckStatus: {
+                        THROTTLED: 'throttled', NO_UPDATE: 'no_update',
+                        UPDATE_AVAILABLE: 'update_available'
+                    },
+                };
+            }
+
+            // 3. Realistic navigator.plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => {
+                    var plugins = [
+                        {
+                            name: 'Chrome PDF Plugin',
+                            filename: 'internal-pdf-viewer',
+                            description: 'Portable Document Format'
+                        },
+                        {
+                            name: 'Chrome PDF Viewer',
+                            filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                            description: ''
+                        },
+                        {
+                            name: 'Native Client',
+                            filename: 'internal-nacl-plugin',
+                            description: ''
+                        }
+                    ];
+                    plugins.length = 3;
+                    return plugins;
+                }
+            });
+
+            // 4. Fix navigator.languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['ru-RU', 'ru', 'en-US', 'en']
+            });
+            Object.defineProperty(navigator, 'language', {
+                get: () => 'ru-RU'
+            });
+
+            // 5. Fix navigator.permissions.query
+            if (navigator.permissions && navigator.permissions.query) {
+                var originalQuery = navigator.permissions.query.bind(navigator.permissions);
+                navigator.permissions.query = function(parameters) {
+                    if (parameters.name === 'notifications') {
+                        return Promise.resolve({ state: Notification.permission });
+                    }
+                    return originalQuery(parameters);
+                };
+            }
+
+            // 6. WebGL vendor/renderer spoofing
+            var getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) return 'Google Inc. (Apple)';
+                if (parameter === 37446) return 'ANGLE (Apple, Apple M1, OpenGL 4.1)';
+                return getParameter.call(this, parameter);
+            };
         ''')
-
-        # def requestPaused(**kwargs):
-        #     """Modify outgoing headers."""
-        #     def headers_contain(name):
-        #         return any(x for x in headers.keys() if x.lower() == name)
-
-        #     request_id = kwargs['requestId']
-        #     headers = kwargs['request']['headers']
-
-        #     if not headers_contain('referer'):
-        #         headers['referer'] = 'https://google.com'
-        #         request_headers = [dict(name=k, value=v) for k, v in headers.items()]
-        #         self._chrome_tab.Fetch.continueRequest(requestId=request_id, headers=request_headers)
-        #     else:
-        #         self._chrome_tab.Fetch.continueRequest(requestId=request_id)
 
         def responseReceived(**kwargs) -> None:
             """Gather responses."""
